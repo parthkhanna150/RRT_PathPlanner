@@ -1,3 +1,6 @@
+#! /usr/bin/python2.7
+
+
 import time
 import random
 import drawSample
@@ -6,12 +9,12 @@ import _tkinter
 import sys
 import imageToRects
 
-#display = drawSample.SelectRect(imfile=im2Small,keepcontrol=0,quitLabel="")
+# display = drawSample.SelectRect(keepcontrol=0,quitLabel="")
+# print ('ABC')
 
 visualize = 1
 prompt_before_next=1  # ask before re-running sonce solved
-SMALLSTEP = 4 # what our "local planner" can handle.
-
+SMALLSTEP = 20 # what our "local planner" can handle.
 XMAX=1800
 YMAX=1000
 G = [  [ 0 ]  , [] ]   # nodes, edges
@@ -48,12 +51,6 @@ def drawGraph(G):
             canvas.polyline(  [vertices[i[0]], vertices[i[1]] ]  )
 
 
-def genPoint():
-    # TODO : Function to implement the sampling technique
-    # Uniform distribution
-    #       OR
-    # Gaussian distribution with mean at the goal
-    return [x,y]
 
 def genvertex():
     vertices.append( genPoint() )
@@ -119,6 +116,7 @@ def pickGvertex():
     return v
 
 def redraw():
+    canvas.events()
     canvas.clear()
     canvas.markit(start_x, start_y, r=SMALLSTEP)
     canvas.markit( tx, ty, r=SMALLSTEP )
@@ -166,11 +164,83 @@ def inRect(p,rect,dilation):
    if p[1]>rect[3]+dilation: return 0
    return 1
 
-#TODO: Implement the rrt_search algorithm in this function.
+def closestPointToPoint(G,p2):
+    dmin = 999999999
+    for v in G[nodes]:
+        p1 = vertices [ v ]
+        d = pointPointDistance(p1,p2)
+        if d <= dmin:
+#             print (v)
+            dmin = d
+            close = v
+    return close
+
+def calculateStep(p1, p2):
+    step = SMALLSTEP
+    if (pointPointDistance(p1,p2)<SMALLSTEP):
+        step = pointPointDistance(p1, p2)
+    return step
+
+def hitsObstacles(new, random, obstacles= obstacles, dilation = 1):
+    for obstacle in obstacles:
+        if (inRect(new, obstacle, dilation)):
+             return 1
+        if(lineHitsRect(new, random, obstacle )):
+            return 1
+    return 0
+
+def genPoint(gaussian = 0):
+    
+    if (gaussian):
+        x = random.gauss(tx, sigmax_for_randgen)
+        y = random.gauss(ty, sigmay_for_randgen)
+    else:
+        x = random.uniform(0,XMAX)
+        y= random.uniform(0,YMAX)
+    return [x,y]
+
+##### Main RRT Method
 def rrt_search(G, tx, ty):
-    # Implement the rrt_algorithm in this section of the code.
-    # You should call genPoint() within this function to 
-    #get samples from different distributions.
+    num_iterations=0
+    while 1:
+        if(num_iterations%50==0):
+            redraw()
+        num_iterations += 1
+        #generating random pt make gaussian=1 parameter for a gaussis
+        xy_rand = genPoint(gaussian=0)
+        #closest pt's (on current graph) index to this random pt
+        closest = closestPointToPoint(G, xy_rand)
+        #closest pt
+        xy_near = vertices[closest]
+        #determining the stepSize
+        step = calculateStep(xy_rand, xy_near)        
+        
+        #vectorizing
+        normal = lineFromPoints(xy_near, xy_rand)
+        
+        #new state of our point
+        xy_new = [(xy_near[0]+normal[0]*step),(xy_near[1]+normal[1]*step)]
+        
+        if (xy_new[0] <10 or xy_new[0]> (XMAX-10) or xy_new[1] <10 
+            or xy_new[1]> (YMAX-10)): continue
+
+        #if obstacle between these two points skip it
+        if (hitsObstacles(xy_new, xy_near)): continue
+        #if no obstacle then add it to the graph
+        else:
+            new_v = pointToVertex(list((xy_new)))
+
+            G[nodes].append(new_v)
+            G[edges].append((closest,new_v))
+
+            if(pointPointDistance((xy_new), (tx,ty))<(SMALLSTEP)): 
+                backtrack = new_v
+                while (backtrack!=0):
+                    backtrack =  returnParent(backtrack)
+                break
+    return G
+
+
 
 if visualize:
     canvas = drawSample.SelectRect(xmin=0,ymin=0,xmax=XMAX ,ymax=YMAX, nrects=0, keepcontrol=0)#, rescale=800/1800.)
@@ -229,8 +299,10 @@ if visualize:
 
 
 maxvertex += 1
+file_name = 'step_'+str(SMALLSTEP)+'_log.txt'
+sys.stdout = open(file_name, 'w')
 
-while 1:
+for _ in range(0,1):
     # graph G
     G = [  [ 0 ]  , [] ]   # nodes, edges
     vertices = [ [10,270], [20,280]   ]
@@ -241,9 +313,14 @@ while 1:
     if visualize: canvas.markit( tx, ty, r=SMALLSTEP )
 
     drawGraph(G)
-    rrt_search(G, tx, ty)
+    iterations = rrt_search(G, tx, ty)
+    print (iterations)
+    
+# exit()
 
-#canvas.showRect(rect,fill='red')
+
+# canvas.showRect(rect,fill='red')
 
 if visualize:
     canvas.mainloop()
+
